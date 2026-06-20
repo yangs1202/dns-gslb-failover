@@ -1,0 +1,15 @@
+.DS_Store
+
+# Build outputs
+/bin/
+/dist/
+*.test
+
+# Runtime/local config
+.env
+.env.*
+!.env.example
+
+# Editor files
+.idea/
+.vscode/
