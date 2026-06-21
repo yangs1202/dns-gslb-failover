@@ -7,15 +7,16 @@
 
 Minimal DNS failover agent for three-region deployments.
 
-`dns-failover` monitors regional HTTP health endpoints, reaches a quorum-backed failover decision through `etcd`, and updates a Cloudflare CNAME record so traffic moves to the selected regional VIP.
+`dns-failover` monitors regional HTTP health endpoints, reaches a quorum-backed failover decision through `etcd`, and updates a DNS provider CNAME record so traffic moves to the selected regional VIP.
 
 ## Features
 
 - HTTP health checks where only `200 OK` is healthy.
 - CNAME-based failover instead of changing regional `A` records.
 - ENV-based configuration for public-repo-safe deployment.
+- DNS provider abstraction so Cloudflare or another provider can be plugged in.
 - Planned `etcd` quorum and leader election to avoid split brain.
-- Planned Cloudflare DNS update client.
+- Planned DNS provider clients.
 
 ## Design
 
@@ -24,7 +25,7 @@ Minimal DNS failover agent for three-region deployments.
 3. A healthy endpoint must return `200 OK`.
 4. Agents write observations to `etcd`.
 5. Only the `etcd` leader with quorum may decide failover.
-6. The leader updates the active Cloudflare CNAME to point at the selected regional DNS name.
+6. The leader updates the active provider-managed CNAME to point at the selected regional DNS name.
 
 ## DNS model
 
@@ -49,12 +50,24 @@ Region selection follows `DNS_FAILOVER_REGION_PRIORITY`. The first healthy regio
 
 The public repository uses `.invalid` examples only. Production domains, IPs, and region names must stay outside git.
 
+## DNS providers
+
+DNS updates go through the `internal/dnsprovider.Provider` interface. A provider implementation only needs to implement CNAME updates for the managed VIP record.
+
+```go
+type Provider interface {
+	UpdateCNAME(ctx context.Context, change CNAMEChange) error
+}
+```
+
+Provider selection is configuration-driven through `DNS_FAILOVER_DNS_PROVIDER`. Provider-specific clients should be registered behind the provider registry instead of being called directly from failover logic.
+
 ## Security posture
 
 This repository is public and must not contain private infrastructure details.
 
-- No real region names, public IPs, internal domains, Cloudflare tokens, or Vault paths.
-- Cloudflare credentials are read from environment variables.
+- No real region names, public IPs, internal domains, provider tokens, or Vault paths.
+- DNS provider credentials are read from environment variables.
 - Vault integration is intentionally out of scope for the public version.
 - Example configuration uses `.invalid` domains only.
 
@@ -67,11 +80,12 @@ DNS_FAILOVER_REGION_DNS_TARGETS=region-a=region-a.example.invalid,region-b=regio
 DNS_FAILOVER_REGION_PRIORITY=region-a,region-b,region-c
 DNS_FAILOVER_SERVICE_RECORDS=app.example.invalid
 DNS_FAILOVER_HEALTH_TIMEOUT=2s
-CLOUDFLARE_API_TOKEN=...
-CLOUDFLARE_ZONE_ID=...
-CLOUDFLARE_RECORD_ID=...
-CLOUDFLARE_RECORD_NAME=vip.example.invalid
-CLOUDFLARE_RECORD_TYPE=CNAME
+DNS_FAILOVER_DNS_PROVIDER=example-provider
+DNS_FAILOVER_DNS_API_TOKEN=...
+DNS_FAILOVER_DNS_ZONE_ID=...
+DNS_FAILOVER_DNS_RECORD_ID=...
+DNS_FAILOVER_DNS_RECORD_NAME=vip.example.invalid
+DNS_FAILOVER_DNS_RECORD_TYPE=CNAME
 ```
 
 ## Current status
@@ -87,7 +101,7 @@ Planned next steps:
 - `etcd` observation storage
 - `etcd` lease-based leader election
 - quorum-gated failover decision
-- Cloudflare DNS update client
+- DNS provider update clients
 
 ## Development
 

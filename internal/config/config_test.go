@@ -126,16 +126,20 @@ func TestConfigSupportsThreeRegionCNAMEScenario(t *testing.T) {
 	t.Setenv("DNS_FAILOVER_REGION_DNS_TARGETS", "region-a=region-a.example.invalid,region-b=region-b.example.invalid,region-c=region-c.example.invalid")
 	t.Setenv("DNS_FAILOVER_REGION_PRIORITY", "region-a,region-b,region-c")
 	t.Setenv("DNS_FAILOVER_SERVICE_RECORDS", "app.example.invalid")
-	t.Setenv("CLOUDFLARE_RECORD_NAME", "vip.example.invalid")
-	t.Setenv("CLOUDFLARE_RECORD_TYPE", "CNAME")
+	t.Setenv("DNS_FAILOVER_DNS_PROVIDER", "cloudflare")
+	t.Setenv("DNS_FAILOVER_DNS_RECORD_NAME", "vip.example.invalid")
+	t.Setenv("DNS_FAILOVER_DNS_RECORD_TYPE", "CNAME")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		t.Fatalf("LoadFromEnv returned error: %v", err)
 	}
 
-	if cfg.Cloudflare.RecordName != "vip.example.invalid" {
-		t.Fatalf("expected vip CNAME record, got %q", cfg.Cloudflare.RecordName)
+	if cfg.DNSProvider.Provider != "cloudflare" {
+		t.Fatalf("expected configured DNS provider, got %q", cfg.DNSProvider.Provider)
+	}
+	if cfg.DNSProvider.RecordName != "vip.example.invalid" {
+		t.Fatalf("expected vip CNAME record, got %q", cfg.DNSProvider.RecordName)
 	}
 	if cfg.Endpoints[0].URL != "https://region-a.example.invalid/ncm-cgi/health" {
 		t.Fatalf("expected configured health check path, got %q", cfg.Endpoints[0].URL)
@@ -145,5 +149,33 @@ func TestConfigSupportsThreeRegionCNAMEScenario(t *testing.T) {
 	}
 	if cfg.ServiceRecords[0] != "app.example.invalid" {
 		t.Fatalf("expected service alias, got %q", cfg.ServiceRecords[0])
+	}
+}
+
+func TestLoadFromEnvRequiresDNSProvider(t *testing.T) {
+	t.Setenv("DNS_FAILOVER_REGION_ID", "region-a")
+	t.Setenv("DNS_FAILOVER_REGION_ENDPOINTS", "region-a=https://region-a.example.invalid/healthz")
+	t.Setenv("DNS_FAILOVER_REGION_DNS_TARGETS", "region-a=region-a.example.invalid")
+	t.Setenv("DNS_FAILOVER_REGION_PRIORITY", "region-a")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("expected missing DNS provider error")
+	}
+}
+
+func TestLoadFromEnvDefaultsDNSRecordType(t *testing.T) {
+	t.Setenv("DNS_FAILOVER_REGION_ID", "region-a")
+	t.Setenv("DNS_FAILOVER_REGION_ENDPOINTS", "region-a=https://region-a.example.invalid/healthz")
+	t.Setenv("DNS_FAILOVER_REGION_DNS_TARGETS", "region-a=region-a.example.invalid")
+	t.Setenv("DNS_FAILOVER_REGION_PRIORITY", "region-a")
+	t.Setenv("DNS_FAILOVER_DNS_PROVIDER", "example")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv returned error: %v", err)
+	}
+	if cfg.DNSProvider.RecordType != "CNAME" {
+		t.Fatalf("expected default record type CNAME, got %q", cfg.DNSProvider.RecordType)
 	}
 }

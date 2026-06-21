@@ -15,7 +15,7 @@ type Config struct {
 	RegionPriority []string
 	ServiceRecords []string
 	HealthTimeout  time.Duration
-	Cloudflare     CloudflareConfig
+	DNSProvider    DNSProviderConfig
 }
 
 type Endpoint struct {
@@ -28,7 +28,8 @@ type DNSTarget struct {
 	Name     string
 }
 
-type CloudflareConfig struct {
+type DNSProviderConfig struct {
+	Provider   string
 	APIToken   string
 	ZoneID     string
 	RecordID   string
@@ -40,20 +41,24 @@ func LoadFromEnv() (Config, error) {
 	cfg := Config{
 		RegionID:      strings.TrimSpace(os.Getenv("DNS_FAILOVER_REGION_ID")),
 		HealthTimeout: 2 * time.Second,
-		Cloudflare: CloudflareConfig{
-			APIToken:   os.Getenv("CLOUDFLARE_API_TOKEN"),
-			ZoneID:     os.Getenv("CLOUDFLARE_ZONE_ID"),
-			RecordID:   os.Getenv("CLOUDFLARE_RECORD_ID"),
-			RecordName: os.Getenv("CLOUDFLARE_RECORD_NAME"),
-			RecordType: strings.TrimSpace(os.Getenv("CLOUDFLARE_RECORD_TYPE")),
+		DNSProvider: DNSProviderConfig{
+			Provider:   strings.TrimSpace(os.Getenv("DNS_FAILOVER_DNS_PROVIDER")),
+			APIToken:   os.Getenv("DNS_FAILOVER_DNS_API_TOKEN"),
+			ZoneID:     os.Getenv("DNS_FAILOVER_DNS_ZONE_ID"),
+			RecordID:   os.Getenv("DNS_FAILOVER_DNS_RECORD_ID"),
+			RecordName: os.Getenv("DNS_FAILOVER_DNS_RECORD_NAME"),
+			RecordType: strings.TrimSpace(os.Getenv("DNS_FAILOVER_DNS_RECORD_TYPE")),
 		},
 	}
-	if cfg.Cloudflare.RecordType == "" {
-		cfg.Cloudflare.RecordType = "CNAME"
+	if cfg.DNSProvider.RecordType == "" {
+		cfg.DNSProvider.RecordType = "CNAME"
 	}
 
 	if cfg.RegionID == "" {
 		return Config{}, fmt.Errorf("DNS_FAILOVER_REGION_ID is required")
+	}
+	if cfg.DNSProvider.Provider == "" {
+		return Config{}, fmt.Errorf("DNS_FAILOVER_DNS_PROVIDER is required")
 	}
 
 	if timeoutText := strings.TrimSpace(os.Getenv("DNS_FAILOVER_HEALTH_TIMEOUT")); timeoutText != "" {
