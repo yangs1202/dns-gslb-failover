@@ -9,11 +9,13 @@ import (
 )
 
 type Config struct {
-	RegionID      string
-	Endpoints     []Endpoint
-	DNSTargets    []DNSTarget
-	HealthTimeout time.Duration
-	Cloudflare    CloudflareConfig
+	RegionID       string
+	Endpoints      []Endpoint
+	DNSTargets     []DNSTarget
+	RegionPriority []string
+	ServiceRecords []string
+	HealthTimeout  time.Duration
+	Cloudflare     CloudflareConfig
 }
 
 type Endpoint struct {
@@ -79,6 +81,21 @@ func LoadFromEnv() (Config, error) {
 		return Config{}, err
 	}
 	cfg.DNSTargets = dnsTargets
+
+	regionPriority, err := parseRegionPriority(os.Getenv("DNS_FAILOVER_REGION_PRIORITY"))
+	if err != nil {
+		return Config{}, err
+	}
+	if err := validateRegionPriority(regionPriority, endpoints); err != nil {
+		return Config{}, err
+	}
+	cfg.RegionPriority = regionPriority
+
+	serviceRecords, err := parseDNSNames(os.Getenv("DNS_FAILOVER_SERVICE_RECORDS"), "DNS_FAILOVER_SERVICE_RECORDS")
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.ServiceRecords = serviceRecords
 
 	return cfg, nil
 }
@@ -185,4 +202,79 @@ func validateRegionSets(endpoints []Endpoint, targets []DNSTarget) error {
 	}
 
 	return nil
+}
+
+func parseRegionPriority(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("DNS_FAILOVER_REGION_PRIORITY is required")
+	}
+
+	parts := strings.Split(raw, ",")
+	priority := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+
+	for _, part := range parts {
+		regionID := strings.TrimSpace(part)
+		if regionID == "" {
+			return nil, fmt.Errorf("DNS_FAILOVER_REGION_PRIORITY contains empty region_id")
+		}
+		if _, exists := seen[regionID]; exists {
+			return nil, fmt.Errorf("duplicate priority region_id %q", regionID)
+		}
+
+		seen[regionID] = struct{}{}
+		priority = append(priority, regionID)
+	}
+
+	return priority, nil
+}
+
+func validateRegionPriority(priority []string, endpoints []Endpoint) error {
+	endpointRegions := make(map[string]struct{}, len(endpoints))
+	for _, endpoint := range endpoints {
+		endpointRegions[endpoint.RegionID] = struct{}{}
+	}
+
+	for _, regionID := range priority {
+		if _, ok := endpointRegions[regionID]; !ok {
+			return fmt.Errorf("priority region %q has no matching health endpoint", regionID)
+		}
+		delete(endpointRegions, regionID)
+	}
+
+	for regionID := range endpointRegions {
+		return fmt.Errorf("health endpoint %q has no matching priority entry", regionID)
+	}
+
+	return nil
+}
+
+func parseDNSNames(raw string, envName string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	names := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+
+	for _, part := range parts {
+		name := strings.TrimSuffix(strings.TrimSpace(part), ".")
+		if name == "" {
+			return nil, fmt.Errorf("%s contains empty DNS name", envName)
+		}
+		if strings.ContainsAny(name, "/:") {
+			return nil, fmt.Errorf("%s value %q must be a DNS name, not a URL", envName, name)
+		}
+		if _, exists := seen[name]; exists {
+			return nil, fmt.Errorf("%s contains duplicate DNS name %q", envName, name)
+		}
+
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+
+	return names, nil
 }

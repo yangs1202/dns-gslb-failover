@@ -31,7 +31,7 @@ Minimal DNS failover agent for three-region deployments.
 Regional public IPs are registered ahead of time as stable DNS records.
 
 ```text
-service.example.invalid
+app.example.invalid
 └── CNAME vip.example.invalid
     └── CNAME region-a.example.invalid
         └── A pre-registered regional public IP
@@ -44,6 +44,8 @@ vip.example.invalid -> region-a.example.invalid
 vip.example.invalid -> region-b.example.invalid
 vip.example.invalid -> region-c.example.invalid
 ```
+
+Region selection follows `DNS_FAILOVER_REGION_PRIORITY`. The first healthy region in that list becomes the desired CNAME target.
 
 The public repository uses `.invalid` examples only. Production domains, IPs, and region names must stay outside git.
 
@@ -62,6 +64,8 @@ This repository is public and must not contain private infrastructure details.
 DNS_FAILOVER_REGION_ID=region-a
 DNS_FAILOVER_REGION_ENDPOINTS=region-a=https://example-a.invalid/healthz,region-b=https://example-b.invalid/healthz,region-c=https://example-c.invalid/healthz
 DNS_FAILOVER_REGION_DNS_TARGETS=region-a=region-a.example.invalid,region-b=region-b.example.invalid,region-c=region-c.example.invalid
+DNS_FAILOVER_REGION_PRIORITY=region-a,region-b,region-c
+DNS_FAILOVER_SERVICE_RECORDS=app.example.invalid
 DNS_FAILOVER_HEALTH_TIMEOUT=2s
 CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_ZONE_ID=...
