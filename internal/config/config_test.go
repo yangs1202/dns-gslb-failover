@@ -126,6 +126,9 @@ func TestConfigSupportsThreeRegionCNAMEScenario(t *testing.T) {
 	t.Setenv("DNS_FAILOVER_REGION_DNS_TARGETS", "region-a=region-a.example.invalid,region-b=region-b.example.invalid,region-c=region-c.example.invalid")
 	t.Setenv("DNS_FAILOVER_REGION_PRIORITY", "region-a,region-b,region-c")
 	t.Setenv("DNS_FAILOVER_SERVICE_RECORDS", "app.example.invalid")
+	t.Setenv("DNS_FAILOVER_CHECK_INTERVAL", "15s")
+	t.Setenv("DNS_FAILOVER_ETCD_ENDPOINTS", "10.0.0.1:2379,10.0.0.2:2379,10.0.0.3:2379")
+	t.Setenv("DNS_FAILOVER_ETCD_KEY_PREFIX", "/dns-failover-test")
 	t.Setenv("DNS_FAILOVER_DNS_PROVIDER", "cloudflare")
 	t.Setenv("DNS_FAILOVER_DNS_RECORD_NAME", "vip.example.invalid")
 	t.Setenv("DNS_FAILOVER_DNS_RECORD_TYPE", "CNAME")
@@ -149,6 +152,15 @@ func TestConfigSupportsThreeRegionCNAMEScenario(t *testing.T) {
 	}
 	if cfg.ServiceRecords[0] != "app.example.invalid" {
 		t.Fatalf("expected service alias, got %q", cfg.ServiceRecords[0])
+	}
+	if cfg.CheckInterval.String() != "15s" {
+		t.Fatalf("expected configured check interval, got %s", cfg.CheckInterval)
+	}
+	if len(cfg.Etcd.Endpoints) != 3 {
+		t.Fatalf("expected three etcd endpoints, got %d", len(cfg.Etcd.Endpoints))
+	}
+	if cfg.Etcd.KeyPrefix != "/dns-failover-test/" {
+		t.Fatalf("expected normalized etcd prefix, got %q", cfg.Etcd.KeyPrefix)
 	}
 }
 
@@ -177,5 +189,34 @@ func TestLoadFromEnvDefaultsDNSRecordType(t *testing.T) {
 	}
 	if cfg.DNSProvider.RecordType != "CNAME" {
 		t.Fatalf("expected default record type CNAME, got %q", cfg.DNSProvider.RecordType)
+	}
+	if cfg.CheckInterval.String() != "10s" {
+		t.Fatalf("expected default check interval 10s, got %s", cfg.CheckInterval)
+	}
+	if cfg.Etcd.KeyPrefix != "/dns-failover/" {
+		t.Fatalf("expected default etcd key prefix, got %q", cfg.Etcd.KeyPrefix)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidEtcdKeyPrefix(t *testing.T) {
+	t.Setenv("DNS_FAILOVER_REGION_ID", "region-a")
+	t.Setenv("DNS_FAILOVER_REGION_ENDPOINTS", "region-a=https://region-a.example.invalid/healthz")
+	t.Setenv("DNS_FAILOVER_REGION_DNS_TARGETS", "region-a=region-a.example.invalid")
+	t.Setenv("DNS_FAILOVER_REGION_PRIORITY", "region-a")
+	t.Setenv("DNS_FAILOVER_DNS_PROVIDER", "example")
+	t.Setenv("DNS_FAILOVER_ETCD_KEY_PREFIX", "dns-failover")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("expected invalid etcd key prefix error")
+	}
+}
+
+func TestParseListRejectsDuplicates(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseList("10.0.0.1:2379,10.0.0.1:2379", "TEST_LIST")
+	if err == nil {
+		t.Fatal("expected duplicate list value error")
 	}
 }

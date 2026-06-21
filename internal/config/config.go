@@ -15,6 +15,8 @@ type Config struct {
 	RegionPriority []string
 	ServiceRecords []string
 	HealthTimeout  time.Duration
+	CheckInterval  time.Duration
+	Etcd           EtcdConfig
 	DNSProvider    DNSProviderConfig
 }
 
@@ -37,10 +39,19 @@ type DNSProviderConfig struct {
 	RecordType string
 }
 
+type EtcdConfig struct {
+	Endpoints []string
+	KeyPrefix string
+}
+
 func LoadFromEnv() (Config, error) {
 	cfg := Config{
 		RegionID:      strings.TrimSpace(os.Getenv("DNS_FAILOVER_REGION_ID")),
 		HealthTimeout: 2 * time.Second,
+		CheckInterval: 10 * time.Second,
+		Etcd: EtcdConfig{
+			KeyPrefix: "/dns-failover/",
+		},
 		DNSProvider: DNSProviderConfig{
 			Provider:   strings.TrimSpace(os.Getenv("DNS_FAILOVER_DNS_PROVIDER")),
 			APIToken:   os.Getenv("DNS_FAILOVER_DNS_API_TOKEN"),
@@ -70,6 +81,32 @@ func LoadFromEnv() (Config, error) {
 			return Config{}, fmt.Errorf("DNS_FAILOVER_HEALTH_TIMEOUT must be positive")
 		}
 		cfg.HealthTimeout = timeout
+	}
+
+	if intervalText := strings.TrimSpace(os.Getenv("DNS_FAILOVER_CHECK_INTERVAL")); intervalText != "" {
+		interval, err := time.ParseDuration(intervalText)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse DNS_FAILOVER_CHECK_INTERVAL: %w", err)
+		}
+		if interval <= 0 {
+			return Config{}, fmt.Errorf("DNS_FAILOVER_CHECK_INTERVAL must be positive")
+		}
+		cfg.CheckInterval = interval
+	}
+
+	etcdEndpoints, err := parseList(os.Getenv("DNS_FAILOVER_ETCD_ENDPOINTS"), "DNS_FAILOVER_ETCD_ENDPOINTS")
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Etcd.Endpoints = etcdEndpoints
+	if keyPrefix := strings.TrimSpace(os.Getenv("DNS_FAILOVER_ETCD_KEY_PREFIX")); keyPrefix != "" {
+		if !strings.HasPrefix(keyPrefix, "/") {
+			return Config{}, fmt.Errorf("DNS_FAILOVER_ETCD_KEY_PREFIX must start with /")
+		}
+		if !strings.HasSuffix(keyPrefix, "/") {
+			keyPrefix += "/"
+		}
+		cfg.Etcd.KeyPrefix = keyPrefix
 	}
 
 	endpoints, err := parseEndpoints(os.Getenv("DNS_FAILOVER_REGION_ENDPOINTS"))
@@ -282,4 +319,28 @@ func parseDNSNames(raw string, envName string) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+func parseList(raw string, envName string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value == "" {
+			return nil, fmt.Errorf("%s contains empty value", envName)
+		}
+		if _, exists := seen[value]; exists {
+			return nil, fmt.Errorf("%s contains duplicate value %q", envName, value)
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+
+	return values, nil
 }

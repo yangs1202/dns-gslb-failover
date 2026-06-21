@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/yangs1202/dns-failover/internal/config"
@@ -21,11 +22,40 @@ func main() {
 	}
 
 	checker := health.NewHTTPChecker(cfg.HealthTimeout)
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.HealthTimeout*time.Duration(len(cfg.Endpoints)))
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	logger.Info(
+		"agent started",
+		"region", cfg.RegionID,
+		"check_interval", cfg.CheckInterval.String(),
+		"health_timeout", cfg.HealthTimeout.String(),
+		"etcd_endpoints", len(cfg.Etcd.Endpoints),
+		"etcd_key_prefix", cfg.Etcd.KeyPrefix,
+	)
+
+	runHealthCheckCycle(ctx, logger, checker, cfg)
+
+	ticker := time.NewTicker(cfg.CheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("agent stopped", "region", cfg.RegionID)
+			return
+		case <-ticker.C:
+			runHealthCheckCycle(ctx, logger, checker, cfg)
+		}
+	}
+}
+
+func runHealthCheckCycle(ctx context.Context, logger *slog.Logger, checker health.HTTPChecker, cfg config.Config) {
+	cycleCtx, cancel := context.WithTimeout(ctx, cfg.HealthTimeout*time.Duration(len(cfg.Endpoints)))
 	defer cancel()
 
 	for _, endpoint := range cfg.Endpoints {
-		result := checker.Check(ctx, endpoint)
+		result := checker.Check(cycleCtx, endpoint)
 		logger.Info(
 			"health observation",
 			"observer_region", cfg.RegionID,
@@ -37,7 +67,7 @@ func main() {
 		)
 	}
 
-	fmt.Println("health check cycle completed")
+	logger.Info("health check cycle completed", "observer_region", cfg.RegionID)
 }
 
 func errorString(err error) string {

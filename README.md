@@ -15,6 +15,8 @@ Minimal DNS failover agent for three-region deployments.
 - CNAME-based failover instead of changing regional `A` records.
 - ENV-based configuration for public-repo-safe deployment.
 - DNS provider abstraction so Cloudflare or another provider can be plugged in.
+- External `etcd` endpoint configuration for sharing an existing quorum cluster.
+- Long-running agent process suitable for container deployments.
 - Planned `etcd` quorum and leader election to avoid split brain.
 - Planned DNS provider clients.
 
@@ -80,6 +82,9 @@ DNS_FAILOVER_REGION_DNS_TARGETS=region-a=region-a.example.invalid,region-b=regio
 DNS_FAILOVER_REGION_PRIORITY=region-a,region-b,region-c
 DNS_FAILOVER_SERVICE_RECORDS=app.example.invalid
 DNS_FAILOVER_HEALTH_TIMEOUT=2s
+DNS_FAILOVER_CHECK_INTERVAL=10s
+DNS_FAILOVER_ETCD_ENDPOINTS=10.0.0.1:2379,10.0.0.2:2379,10.0.0.3:2379
+DNS_FAILOVER_ETCD_KEY_PREFIX=/dns-failover/
 DNS_FAILOVER_DNS_PROVIDER=example-provider
 DNS_FAILOVER_DNS_API_TOKEN=...
 DNS_FAILOVER_DNS_ZONE_ID=...
@@ -94,11 +99,12 @@ Initial scaffold only:
 
 - ENV-based configuration
 - HTTP `200 OK` health checker
-- agent entrypoint that prints regional health observations
+- long-running agent entrypoint that prints regional health observations
+- external `etcd` endpoint and key-prefix configuration
 
 Planned next steps:
 
-- `etcd` observation storage
+- `etcd` observation storage using the configured endpoints and prefix
 - `etcd` lease-based leader election
 - quorum-gated failover decision
 - DNS provider update clients
@@ -109,6 +115,13 @@ Planned next steps:
 go test ./...
 go test ./... -coverprofile=coverage/coverage.out
 go build ./cmd/dns-failover
+docker build -t dns-failover:local .
 ```
 
 CI runs formatting checks, race-enabled tests, and coverage reporting on every push and pull request.
+
+Version tags that match `v*` publish a container image to GHCR:
+
+```text
+ghcr.io/yangs1202/dns-failover:v0.1.0
+```
