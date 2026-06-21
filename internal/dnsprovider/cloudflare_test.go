@@ -45,6 +45,7 @@ func TestCloudflareProviderUpdatesCNAME(t *testing.T) {
 		RecordID:   "record-1",
 		RecordName: "vip.example.invalid",
 		RecordType: "CNAME",
+		TTL:        1,
 	})
 	if err != nil {
 		t.Fatalf("NewCloudflareProvider returned error: %v", err)
@@ -70,5 +71,8 @@ func TestCloudflareProviderUpdatesCNAME(t *testing.T) {
 	}
 	if gotPayload.Type != "CNAME" {
 		t.Fatalf("expected CNAME, got %q", gotPayload.Type)
+	}
+	if gotPayload.TTL != 1 {
+		t.Fatalf("expected ttl 1, got %d", gotPayload.TTL)
 	}
 }

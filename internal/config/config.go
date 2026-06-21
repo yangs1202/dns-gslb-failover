@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -38,6 +39,7 @@ type DNSProviderConfig struct {
 	RecordID   string
 	RecordName string
 	RecordType string
+	TTL        int
 }
 
 type EtcdConfig struct {
@@ -64,6 +66,7 @@ func LoadFromEnv() (Config, error) {
 			RecordID:   os.Getenv("DNS_FAILOVER_DNS_RECORD_ID"),
 			RecordName: os.Getenv("DNS_FAILOVER_DNS_RECORD_NAME"),
 			RecordType: strings.TrimSpace(os.Getenv("DNS_FAILOVER_DNS_RECORD_TYPE")),
+			TTL:        60,
 		},
 		Notifications: NotificationConfig{
 			SlackWebhookURL: strings.TrimSpace(os.Getenv("DNS_FAILOVER_SLACK_WEBHOOK_URL")),
@@ -71,6 +74,17 @@ func LoadFromEnv() (Config, error) {
 	}
 	if cfg.DNSProvider.RecordType == "" {
 		cfg.DNSProvider.RecordType = "CNAME"
+	}
+
+	if ttlText := strings.TrimSpace(os.Getenv("DNS_FAILOVER_DNS_TTL")); ttlText != "" {
+		ttl, err := strconv.Atoi(ttlText)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse DNS_FAILOVER_DNS_TTL: %w", err)
+		}
+		if ttl <= 0 {
+			return Config{}, fmt.Errorf("DNS_FAILOVER_DNS_TTL must be positive")
+		}
+		cfg.DNSProvider.TTL = ttl
 	}
 
 	if cfg.RegionID == "" {

@@ -219,6 +219,7 @@ func newDNSProvider(cfg config.Config) (dnsprovider.Provider, error) {
 		RecordID:   cfg.DNSProvider.RecordID,
 		RecordName: cfg.DNSProvider.RecordName,
 		RecordType: cfg.DNSProvider.RecordType,
+		TTL:        cfg.DNSProvider.TTL,
 	})
 }
 

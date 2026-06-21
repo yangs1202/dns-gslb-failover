@@ -132,6 +132,7 @@ func TestConfigSupportsThreeRegionCNAMEScenario(t *testing.T) {
 	t.Setenv("DNS_FAILOVER_DNS_PROVIDER", "cloudflare")
 	t.Setenv("DNS_FAILOVER_DNS_RECORD_NAME", "vip.example.invalid")
 	t.Setenv("DNS_FAILOVER_DNS_RECORD_TYPE", "CNAME")
+	t.Setenv("DNS_FAILOVER_DNS_TTL", "1")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -155,6 +156,9 @@ func TestConfigSupportsThreeRegionCNAMEScenario(t *testing.T) {
 	}
 	if cfg.CheckInterval.String() != "15s" {
 		t.Fatalf("expected configured check interval, got %s", cfg.CheckInterval)
+	}
+	if cfg.DNSProvider.TTL != 1 {
+		t.Fatalf("expected configured dns ttl 1, got %d", cfg.DNSProvider.TTL)
 	}
 	if len(cfg.Etcd.Endpoints) != 3 {
 		t.Fatalf("expected three etcd endpoints, got %d", len(cfg.Etcd.Endpoints))
@@ -195,6 +199,23 @@ func TestLoadFromEnvDefaultsDNSRecordType(t *testing.T) {
 	}
 	if cfg.Etcd.KeyPrefix != "/dns-failover/" {
 		t.Fatalf("expected default etcd key prefix, got %q", cfg.Etcd.KeyPrefix)
+	}
+	if cfg.DNSProvider.TTL != 60 {
+		t.Fatalf("expected default dns ttl 60, got %d", cfg.DNSProvider.TTL)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidDNSTTL(t *testing.T) {
+	t.Setenv("DNS_FAILOVER_REGION_ID", "region-a")
+	t.Setenv("DNS_FAILOVER_REGION_ENDPOINTS", "region-a=https://region-a.example.invalid/healthz")
+	t.Setenv("DNS_FAILOVER_REGION_DNS_TARGETS", "region-a=region-a.example.invalid")
+	t.Setenv("DNS_FAILOVER_REGION_PRIORITY", "region-a")
+	t.Setenv("DNS_FAILOVER_DNS_PROVIDER", "example")
+	t.Setenv("DNS_FAILOVER_DNS_TTL", "0")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("expected invalid DNS TTL error")
 	}
 }
 

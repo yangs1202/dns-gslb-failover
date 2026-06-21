@@ -19,6 +19,7 @@ type CloudflareProvider struct {
 	recordID   string
 	recordName string
 	recordType string
+	ttl        int
 	baseURL    string
 	client     *http.Client
 }
@@ -44,6 +45,10 @@ func NewCloudflareProvider(cfg Config) (Provider, error) {
 	if recordType != "CNAME" {
 		return nil, fmt.Errorf("cloudflare provider only supports CNAME records, got %q", recordType)
 	}
+	ttl := cfg.TTL
+	if ttl <= 0 {
+		ttl = 60
+	}
 
 	return CloudflareProvider{
 		apiToken:   cfg.APIToken,
@@ -51,6 +56,7 @@ func NewCloudflareProvider(cfg Config) (Provider, error) {
 		recordID:   strings.TrimSpace(cfg.RecordID),
 		recordName: strings.TrimSuffix(strings.TrimSpace(cfg.RecordName), "."),
 		recordType: recordType,
+		ttl:        ttl,
 		baseURL:    cloudflareAPIBaseURL,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -81,7 +87,7 @@ func (p CloudflareProvider) UpdateCNAME(ctx context.Context, change CNAMEChange)
 		Type:    p.recordType,
 		Name:    recordName,
 		Content: targetName,
-		TTL:     60,
+		TTL:     p.ttl,
 		Proxied: false,
 	}
 	body, err := json.Marshal(payload)

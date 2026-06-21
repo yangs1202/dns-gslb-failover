@@ -23,6 +23,7 @@ type Config struct {
 	RecordID   string
 	RecordName string
 	RecordType string
+	TTL        int
 }
 
 type Factory func(Config) (Provider, error)
